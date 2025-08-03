@@ -1,0 +1,349 @@
+# 数据中台通用GraphQL Schema设计
+# 支持动态表查询、字段投影、权限控制、异步查询等功能
+
+scalar JSON
+scalar DateTime
+
+# ========== 通用查询接口 ==========
+type Query {
+    # 通用表查询 - 核心查询接口
+    queryByTable(
+        tableName: String!
+        filter: TableFilter
+        pagination: PaginationInput
+        fieldSelection: [String!]
+        orderBy: [OrderByInput!]
+    ): TableQueryResult!
+    
+    # 异步查询提交
+    submitAsyncQuery(input: AsyncQueryInput!): AsyncQueryTask!
+    
+    # 查询任务状态
+    queryTaskStatus(taskId: ID!): QueryTaskStatus!
+    
+    # 获取查询结果
+    getQueryResult(taskId: ID!, pagination: PaginationInput): QueryResult!
+    
+    # 元数据查询
+    getTableMetadata(tableName: String!): TableMetadata
+    listTables(filter: TableListFilter): [TableInfo!]!
+    getTableSchema(tableName: String!): TableSchema!
+    
+    # 权限查询
+    getUserPermissions(userId: ID!, tableName: String): UserPermissions!
+    
+    # 查询历史
+    getQueryHistory(userId: ID!, pagination: PaginationInput): [QueryHistoryItem!]!
+}
+
+type Mutation {
+    # 取消异步查询
+    cancelAsyncQuery(taskId: ID!): Boolean!
+    
+    # 缓存管理
+    clearQueryCache(pattern: String): Boolean!
+    
+    # 权限管理
+    updateUserPermissions(input: UpdatePermissionsInput!): UserPermissions!
+}
+
+# ========== 通用查询结果 ==========
+type TableQueryResult {
+    data: [JSON!]!
+    totalCount: Int!
+    hasNextPage: Boolean!
+    executionTime: Int! # 毫秒
+    fromCache: Boolean!
+    metadata: QueryMetadata!
+}
+
+type QueryResult {
+    taskId: ID!
+    data: [JSON!]!
+    totalCount: Int
+    hasNextPage: Boolean
+    columns: [ColumnInfo!]!
+    executionTime: Int
+    status: QueryStatus!
+    error: String
+}
+
+# ========== 异步查询 ==========
+type AsyncQueryTask {
+    taskId: ID!
+    status: QueryStatus!
+    submittedAt: DateTime!
+    estimatedDuration: Int # 预估执行时间(秒)
+    priority: QueryPriority!
+    resourceGroup: String!
+}
+
+type QueryTaskStatus {
+    taskId: ID!
+    status: QueryStatus!
+    progress: Float # 0-1
+    submittedAt: DateTime!
+    startedAt: DateTime
+    completedAt: DateTime
+    executionTime: Int
+    rowsProcessed: Int
+    error: String
+    resultPreview: [JSON!] # 前几行预览
+}
+
+enum QueryStatus {
+    SUBMITTED
+    QUEUED
+    RUNNING
+    COMPLETED
+    FAILED
+    CANCELLED
+    TIMEOUT
+}
+
+enum QueryPriority {
+    LOW
+    NORMAL
+    HIGH
+    URGENT
+}
+
+# ========== 元数据模型 ==========
+type TableMetadata {
+    tableName: String!
+    database: String!
+    tableType: String! # ICEBERG, HIVE, etc.
+    location: String!
+    partitionKeys: [String!]!
+    sortKeys: [String!]!
+    properties: JSON!
+    statistics: TableStatistics
+    lastModified: DateTime!
+    owner: String!
+    description: String
+}
+
+type TableSchema {
+    tableName: String!
+    columns: [ColumnInfo!]!
+    partitionColumns: [ColumnInfo!]!
+    primaryKeys: [String!]!
+    indexes: [IndexInfo!]!
+}
+
+type ColumnInfo {
+    name: String!
+    dataType: String!
+    nullable: Boolean!
+    comment: String
+    defaultValue: String
+    precision: Int
+    scale: Int
+    maxLength: Int
+    tags: [String!]!
+    sensitive: Boolean! # 敏感字段标记
+}
+
+type IndexInfo {
+    name: String!
+    columns: [String!]!
+    unique: Boolean!
+    type: String!
+}
+
+type TableStatistics {
+    rowCount: Long
+    dataSize: Long # bytes
+    fileCount: Int
+    lastAnalyzed: DateTime
+    partitionCount: Int
+}
+
+type TableInfo {
+    tableName: String!
+    database: String!
+    tableType: String!
+    description: String
+    tags: [String!]!
+    owner: String!
+    createdAt: DateTime!
+    lastModified: DateTime!
+    rowCount: Long
+    dataSize: Long
+}
+
+# ========== 权限模型 ==========
+type UserPermissions {
+    userId: ID!
+    tablePermissions: [TablePermission!]!
+    globalPermissions: [String!]!
+    resourceGroups: [String!]!
+    maxQueryTimeout: Int! # 秒
+    maxResultRows: Int!
+}
+
+type TablePermission {
+    tableName: String!
+    database: String!
+    permissions: [String!]! # SELECT, INSERT, UPDATE, DELETE
+    fieldPermissions: [FieldPermission!]!
+    rowLevelFilter: String # WHERE条件
+    maxRows: Int
+}
+
+type FieldPermission {
+    fieldName: String!
+    permission: FieldPermissionType!
+    maskingRule: String # 脱敏规则
+}
+
+enum FieldPermissionType {
+    ALLOW
+    DENY
+    MASK
+    HASH
+}
+
+# ========== 查询历史 ==========
+type QueryHistoryItem {
+    id: ID!
+    userId: ID!
+    query: String!
+    tableName: String
+    submittedAt: DateTime!
+    completedAt: DateTime
+    status: QueryStatus!
+    executionTime: Int
+    rowsReturned: Int
+    dataSize: Long
+    fromCache: Boolean!
+    resourceGroup: String!
+}
+
+# ========== 输入类型 ==========
+input AsyncQueryInput {
+    query: String! # 可以是SQL或GraphQL查询
+    queryType: QueryType!
+    tableName: String
+    priority: QueryPriority = NORMAL
+    resourceGroup: String
+    maxExecutionTime: Int # 秒
+    resultFormat: ResultFormat = JSON
+    cacheEnabled: Boolean = true
+    tags: [String!]
+}
+
+enum QueryType {
+    SQL
+    GRAPHQL
+    TABLE_SCAN
+}
+
+enum ResultFormat {
+    JSON
+    CSV
+    PARQUET
+    AVRO
+}
+
+input TableFilter {
+    conditions: [FilterCondition!]!
+    operator: LogicalOperator = AND
+}
+
+input FilterCondition {
+    field: String!
+    operator: ComparisonOperator!
+    value: JSON!
+    values: [JSON!] # for IN, NOT_IN
+}
+
+enum ComparisonOperator {
+    EQ
+    NE
+    GT
+    GTE
+    LT
+    LTE
+    LIKE
+    NOT_LIKE
+    IN
+    NOT_IN
+    IS_NULL
+    IS_NOT_NULL
+    BETWEEN
+}
+
+enum LogicalOperator {
+    AND
+    OR
+    NOT
+}
+
+input OrderByInput {
+    field: String!
+    direction: SortDirection = ASC
+}
+
+enum SortDirection {
+    ASC
+    DESC
+}
+
+input PaginationInput {
+    offset: Int = 0
+    limit: Int = 100
+    cursor: String
+}
+
+input TableListFilter {
+    database: String
+    namePattern: String
+    tableType: String
+    tags: [String!]
+    owner: String
+    modifiedAfter: DateTime
+    hasData: Boolean
+}
+
+input UpdatePermissionsInput {
+    userId: ID!
+    tablePermissions: [TablePermissionInput!]!
+    globalPermissions: [String!]
+    resourceGroups: [String!]
+    maxQueryTimeout: Int
+    maxResultRows: Int
+}
+
+input TablePermissionInput {
+    tableName: String!
+    database: String!
+    permissions: [String!]!
+    fieldPermissions: [FieldPermissionInput!]
+    rowLevelFilter: String
+    maxRows: Int
+}
+
+input FieldPermissionInput {
+    fieldName: String!
+    permission: FieldPermissionType!
+    maskingRule: String
+}
+
+# ========== 查询元数据 ==========
+type QueryMetadata {
+    executionPlan: String
+    resourceGroup: String!
+    trinoQueryId: String
+    bytesProcessed: Long
+    rowsProcessed: Long
+    cpuTime: Int # 毫秒
+    wallTime: Int # 毫秒
+    peakMemory: Long # bytes
+    spilledBytes: Long
+    cacheHit: Boolean!
+    partitionsPruned: Int
+    partitionsTotal: Int
+}
+
+scalar Long

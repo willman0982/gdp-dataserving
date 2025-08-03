@@ -1,0 +1,154 @@
+type Query {
+    users: [User!]!
+    user(id: ID!): User
+    orders: [Order!]!
+    order(id: ID!): Order
+    userOrders(userId: ID!): [Order!]!
+    
+    products: [Product!]!
+    product(id: ID!): Product
+    productsByCategory(categoryId: ID!): [Product!]!
+    
+    categories: [Category!]!
+    category(id: ID!): Category
+    
+    customers: [Customer!]!
+    customer(id: ID!): Customer
+    customersByLocation(city: String!): [Customer!]!
+}
+
+type User {
+    id: ID!
+    name: String!
+    email: String!
+    createdAt: String!
+    orders: [Order!]!
+}
+
+type Order {
+    id: ID!
+    userId: ID!
+    productName: String!
+    quantity: Int!
+    price: Float!
+    orderDate: String!
+    user: User!
+    product: Product
+    customer: Customer
+}
+
+type Product {
+    id: ID!
+    name: String!
+    description: String
+    price: Float!
+    categoryId: ID!
+    stockQuantity: Int!
+    createdAt: String!
+    category: Category!
+    orders: [Order!]!
+}
+
+type Category {
+    id: ID!
+    name: String!
+    description: String
+    createdAt: String!
+    products: [Product!]!
+}
+
+type Customer {
+    id: ID!
+    firstName: String!
+    lastName: String!
+    email: String!
+    phone: String
+    address: Address
+    createdAt: String!
+    orders: [Order!]!
+}
+
+type Address {
+    street: String!
+    city: String!
+    state: String!
+    zipCode: String!
+    country: String!
+}
+
+type Mutation {
+    createUser(input: CreateUserInput!): User!
+    createOrder(input: CreateOrderInput!): Order!
+    
+    createProduct(input: CreateProductInput!): Product!
+    updateProduct(id: ID!, input: UpdateProductInput!): Product!
+    deleteProduct(id: ID!): Boolean!
+    
+    createCategory(input: CreateCategoryInput!): Category!
+    updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+    
+    createCustomer(input: CreateCustomerInput!): Customer!
+    updateCustomer(id: ID!, input: UpdateCustomerInput!): Customer!
+}
+
+input CreateUserInput {
+    name: String!
+    email: String!
+}
+
+input CreateOrderInput {
+    userId: ID!
+    productName: String!
+    quantity: Int!
+    price: Float!
+}
+
+input CreateProductInput {
+    name: String!
+    description: String
+    price: Float!
+    categoryId: ID!
+    stockQuantity: Int!
+}
+
+input UpdateProductInput {
+    name: String
+    description: String
+    price: Float
+    categoryId: ID
+    stockQuantity: Int
+}
+
+input CreateCategoryInput {
+    name: String!
+    description: String
+}
+
+input UpdateCategoryInput {
+    name: String
+    description: String
+}
+
+input CreateCustomerInput {
+    firstName: String!
+    lastName: String!
+    email: String!
+    phone: String
+    address: AddressInput
+}
+
+input UpdateCustomerInput {
+    firstName: String
+    lastName: String
+    email: String
+    phone: String
+    address: AddressInput
+}
+
+input AddressInput {
+    street: String!
+    city: String!
+    state: String!
+    zipCode: String!
+    country: String!
+}
